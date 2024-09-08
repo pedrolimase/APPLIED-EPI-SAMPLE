@@ -1,0 +1,7 @@
+As observed visually in the descriptive table and graph visualizations,there is little variability among patients subjected to different HFNC weaning protocols in terms of hospitalization time, duration of HFNC use, or the occurrence of weaning failures. Along with the fact that there were few recorded events of interest in the sample, with only six cases of weaning failure per hospital, it becomes difficult for statistical methods to detect any potentially small differences.
+
+Indeed, as shown in Table @tbl-estatisticas, according to the univariate tests, at a significance level of $\alpha = 5%$, no evidence was found that either the hospital or the HFNC weaning protocol is a factor explaining differences in total hospitalization time, pediatric ICU stay duration, HFNC usage time, or the occurrence or number of weaning failures.
+
+To refine the results, I also considered modeling the effect of hospital/protocol adjusted gender and gestational age at birth, all measured prior to the procedure. However, in none of the cases were significant covariates found.
+
+Given these considerations, it may be worth performing an analysis with a larger sample size, so that more events of interest are available for comparison, in order to detect possible differences between hospitals and weaning procedures.

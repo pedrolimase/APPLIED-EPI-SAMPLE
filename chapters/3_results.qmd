@@ -1,0 +1,274 @@
+Table @tbl-estatisticas presents some summary statistics of patietns variables of interest, both in general and segmented by hospital. For categorical variables, namely `gender` and `HFNC weaning failure`, we provide the number and percentage of occurrences for each category. For numerical variables (all the remaining), the median, the 25th and 75th percentiles, mean, and standard deviation, as well as the minimum and maximum values, are calculated. Differences in means or proportions between Hospital B and Hospital A are also presented, along with the $\gamma = 95\%$ confidence interval for these differences, and the p-value of the two-tailed test for no difference. According to the univariate tests, at a $\alpha = 5\%$ significance level, we found no evidence that the hospital or HFNC weaning protocol is a factor that explains the differences in total length of stay, length of stay in the Pediatric ICU (PICU), HFNC usage time, or the occurrence or number of HFNC weaning failures.
+
+[^1]: For the comparison of hospitals with respect to numerical variables, I used Welch's t test; and Wilson's proportion test for the binary variables.
+
+```{r}
+#| label: tbl-estatisticas
+#| tbl-cap: "Descriptive summary statistics and association tests with hospital for variables of interest."
+
+# portuguese format
+# theme_gtsummary_language(
+#   language = "pt",
+#   decimal.mark = ",",
+#   big.mark = ".",
+#   iqr.sep = "; ",
+#   ci.sep = "; ",
+#   set_theme = TRUE
+# )
+
+# english format
+theme_gtsummary_language(
+  language = "en",
+  decimal.mark = ".",
+  big.mark = ",",
+  iqr.sep = ", ",
+  ci.sep = ", ",
+  set_theme = TRUE
+)
+
+tbl_estatisticas <-
+  dados |>
+  select(hospital, genero, idade_gestac_nasc, falha_desmame, num_falhas_desmame,
+         tempo_internacao_hospit, tempo_internacao_utiped, tempo_uso_cnaf) |>
+  tbl_summary(
+    by = hospital,
+    statistic = list(
+      all_continuous2() ~ c("{median} ({p25}; {p75})",
+                            "{mean} ({sd})",
+                            "{min}; {max}")
+    ),
+    type = list(everything() ~ "continuous2",
+                where(is.factor) ~ "categorical"),
+  ) |>
+  add_overall() |>
+  add_difference(
+    conf.level = 0.95,
+    test = list(all_continuous2() ~ "t.test",
+                all_categorical() ~ "wilson_prop_test"),
+    include = everything()
+  ) |>
+  modify_footnote(
+    update = list(
+      estimate ~ "Mean difference; Difference in proportions",
+      c(p.value, conf.low) ~ "Welch's t-test; Wilson's test"
+    )
+  ) |>
+  # modify_header(label = "**Variável**",
+  #               stat_0 = "**Geral**",
+  #               estimate = "**Diferença**",
+  #               conf.low = "**IC 95%**") |>
+  modify_spanning_header(stat_1:stat_2 ~ "**Hospital**") |>
+  bold_labels() |>
+  italicize_labels()
+
+knitr::knit_print(adjust_table_to_format(tbl_estatisticas))
+```
+
+Figure @fig-genero shows the gender proportions of patients in the hospitals. We observe that the proportion of male patients at Hospital B was a little bit higher than at Hospital A, 58% versus 54%. According to Table @tbl-estatisticas, the overall proportions were 55% male patients versus 45% female patients.
+
+```{r}
+#| label: fig-genero
+#| fig-cap: "Gender proportions of patients according to hospital."
+
+plot_xtab(dados$hospital, dados$genero,
+          bar.pos = "stack", margin = "row")
+```
+
+A Figura @fig-falha mostra a ocorrência de falha de desmame do CNAF entre os hospitais. Observa-se que em ambos os hospitais houve 6 pacientes que apresentaram falha, contudo, proporcionalmente, ocorreram mais falhas no Hospital B do que no Hospital A, 19% contra 11%, isto é, uma diferença de 8%. Como mostrado na Tabela @tbl-estatisticas, no geral 14% dos pacientes sofreram falha.
+
+```{r}
+#| label: fig-falha
+#| fig-cap: "Ocurrence of failures in HFCN weaning by hospital."
+
+plot_xtab(dados$hospital, dados$falha_desmame,
+          bar.pos = "stack", margin = "row")
+```
+
+As Figuras @fig-continuas-histograma a @fig-continuas-boxplot mostram a distribuição das variáveis idade gestacional ao nascer e os tempos de internação totais, na UTIPed e de uso do CNAF. A primeira, a Figura @fig-continuas-histograma, mostra o histograma dessas variáveis, ou seja, a densidade de valores em cada faixa determinada pelas barras. A segunda, a Figura @fig-continuas-densidade, mostra gráficos de densidade, uma versão suavizada ou contínua do histograma, que facilita comparações. Por fim, a terceira, a Figura @fig-continuas-boxplot destaca os quartis --- em particular a mediana destacada na Tabela @tbl-estatisticas ---, o que facilita a identificação de diferenças de mediana ou média. Todavia, em nenhum destes gráficos se identifica para alguma variável um desvio expressivo entre os hospitais; os resultados aparentam ser bastante similares.
+
+```{r}
+#| label: fig-continuas-histograma
+#| fig-cap: "Histogram for the distribution of continuous variables by hospital."
+
+dados2 <- dados |>
+  select(hospital, idade_gestac_nasc, starts_with("tempo_")) |>
+  pivot_longer(-hospital, names_to = "variavel", values_to = "valor") |>
+  mutate(variavel = fct_recode(variavel,
+                               "Gestational age at birth (weeks)" = "idade_gestac_nasc",
+                               "Total time of stay (days)" = "tempo_internacao_hospit",
+                               "Time of stay in the PICU (days)" = "tempo_internacao_utiped",
+                               "HFNC usage time (days)" = "tempo_uso_cnaf"))
+
+filter(dados2, !str_detect(variavel, "^Number")) |>
+  ggplot() +
+  aes(x = valor, y = after_stat(density), fill = hospital)+
+  geom_histogram(color = "black", alpha = 0.5)+
+  facet_wrap(~ variavel, scales = "free")+
+  labs(x = "", y = "Density", fill = "")
+```
+
+```{r}
+#| label: fig-continuas-densidade
+#| fig-cap: "Density distribution of continuous variables by hospital."
+
+filter(dados2, !str_detect(variavel, "^Number")) |>
+  ggplot() +
+  aes(x = valor, fill = hospital) +
+  geom_density(color = "black", alpha = 0.5) +
+  facet_wrap( ~ variavel, scales = "free") +
+  labs(x = "", y = "Density", fill = "")
+```
+
+```{r}
+#| label: fig-continuas-boxplot
+#| fig-cap: "Boxplot diagram with the distribution of continuous variables by hospital."
+
+ggplot(dados2) +
+  aes(x = valor, fill = hospital)+
+  geom_boxplot(alpha = 0.5)+
+  facet_wrap(~ variavel, scales = "free")+
+  scale_y_continuous(breaks = NULL)+
+  labs(x = "", y = "", fill = "")
+```
+
+A Figura @fig-num-falhas mostra a distribuição do número de falhas no desmame do CNAF em cada hospital. Como vimos, houve apenas 12 casos de pacientes que sofreram falhas na amostra de dados. Em particular, para cada hospital houve 1 paciente com 2 falhas e 5 pacientes com 1 falha; os demais não apresentaram falhas.
+
+```{r}
+#| label: fig-num-falhas
+#| fig-cap: "Distribuição do número de falhas no desmame do CNAF entre pacientes dos hospitais."
+
+ggplot(dados, aes(x = num_falhas_desmame, y = hospital, color = hospital))+
+  geom_jitter(height = 0.15, width = 0.05, alpha = 0.5)+
+  scale_x_continuous(breaks = c(0, 1, 2))+
+  labs(x = "Número de falhas", y = "", color = "")
+```
+
+A Figura final @fig-idade-gestac mostra o tempo de internação total, tempo de internação na UTIPed e tempo de uso do CNAF segundo idade gestacional ao nascer. As linhas representam as médias dessas variáveis para pacientes de cada idade gestacional. É possível notar que as médias do tempo de internação total são sempre maiores que a do tempo de internação na UTIPed, que por sua vez são maiores que a do tempo de uso do CNAF. No entanto, apesar de parecer que esses tempos tendem a diminuir com a idade gestacional, as diferenças parecem ser pouco acentuadas.
+
+```{r}
+#| label: fig-idade-gestac
+#| fig-cap: "Tempo de internação total, tempo de internação na UTIPed e tempo de uso do CNAF segundo Idade gestacional ao nascer."
+
+pivotear_dados <- . |>
+  pivot_longer(c(tempo_internacao_hospit,
+                 tempo_internacao_utiped,
+                 tempo_uso_cnaf), names_to = "variavel", values_to = "tempo") |>
+  mutate(variavel = fct_recode(variavel,
+                               "Internação total" = "tempo_internacao_hospit",
+                               "Internação na UTIPed" = "tempo_internacao_utiped",
+                               "Uso do CNAF" = "tempo_uso_cnaf"))
+
+media_idade_gestac_nasc <- dados |>
+  select(idade_gestac_nasc, tempo_internacao_hospit, tempo_internacao_utiped, tempo_uso_cnaf) |>
+  group_by(idade_gestac_nasc) |>
+  summarise(across(everything(), mean, na.rm = TRUE)) |>
+  pivotear_dados()
+
+dados |>
+  select(idade_gestac_nasc, tempo_internacao_hospit, tempo_internacao_utiped, tempo_uso_cnaf) |>
+  pivotear_dados() |>
+ggplot(aes(x = idade_gestac_nasc, y = tempo, color = variavel))+
+  geom_jitter(width = 0.1, alpha = 0.6)+
+  geom_line(data = media_idade_gestac_nasc)+
+  # geom_smooth(se = FALSE)+
+  labs(x = "Idade gestacional ao nascer (semanas)", y = "Tempo (dias)", color = "")
+```
+
+```{r}
+tbl_falha_lr <-
+  dados |>
+  mutate(falha_desmame = relevel(falha_desmame, ref = "Não")) |>
+  with(glm(falha_desmame ~ genero + idade_gestac_nasc + hospital, family = "binomial")) |>
+  tbl_regression(exponentiate = TRUE,
+                 intercept = TRUE) |>
+  add_global_p(
+    # keep = TRUE
+  ) |>
+  # add_glance_table() |>
+  bold_labels() |>
+  italicize_labels()
+# tbl_falha_lr$table_body[1, "label"] <- "(Intercepto)"
+```
+
+```{r}
+falha_lr_genero <-
+  inline_text(tbl_falha_lr,
+              variable = "genero",
+              level = "Feminino",
+              pattern = "{estimate} (IC {conf.level*100}%: {conf.low}, {conf.high})")
+falha_lr_idade_nasc <-
+  inline_text(tbl_falha_lr,
+              variable = "idade_gestac_nasc",
+              pattern = "{estimate} (IC {conf.level*100}%: {conf.low}, {conf.high})")
+falha_lr_hospital <-
+  inline_text(tbl_falha_lr,
+              variable = "hospital",
+              level = "A",
+              pattern = "{estimate} (IC {conf.level*100}%: {conf.low}, {conf.high})")
+```
+
+A Tabela @tbl-falha-lr apresenta os resultados do modelo de regressão logística para a ocorrência de falha no desmame do CNAF. A razão de chances (OR) estimada para a variável gênero, `r falha_lr_genero`, indica que os pacientes do sexo feminino têm, em média, 3% menos chances de sofrerem alguma falha no processo de desmame do que os do sexo masculino de mesma idade gestacional e admitidos no mesmo hospital. Já a razão de chances estimada para idade gestacional ao nascer `r falha_lr_idade_nasc` indica que cada semana de gestação diminui a chance de falha em 10%, em média. Por fim, a razão de chances para o hospital estimada `r falha_lr_hospital` indica que a chance de falha no desmame 45% menor no Hospital A. No entanto, nenhuma dessas variáveis foi estatisticamente significativa ao nível $\alpha = 5\%$. Note, além disso, que como mostra o IC, as estimativas são extremamente incertas, especialmente o intercepto, então é prudente evitar interpretá-las.
+
+```{r}
+#| label: tbl-falha-lr
+#| tbl-cap: "Logistic regression table for the occurrence of HFNC weaning failure."
+knitr::knit_print(adjust_table_to_format(tbl_falha_lr))
+```
+
+```{r}
+fit_ttotal_gamma <- glm(tempo_internacao_hospit ~ genero + idade_gestac_nasc + hospital,
+                        family = Gamma(link = "identity"),
+                        data = dados)
+tbl_ttotal_gamma <- fit_ttotal_gamma |>
+  tbl_regression(intercept = TRUE) |>
+  add_global_p()
+# tbl_ttotal_gamma$table_body[1, "label"] <- "(Intercepto)"
+```
+
+```{r}
+fit_tutiped_gamma <- glm(tempo_uso_cnaf ~ genero + idade_gestac_nasc + hospital,
+                        family = Gamma(link = "identity"),
+                        data = dados)
+tbl_tutiped_gamma <- fit_tutiped_gamma |>
+  tbl_regression(intercept = TRUE) |>
+  add_global_p()
+# tbl_tutiped_gamma$table_body[1, "label"] <- "(Intercepto)"
+```
+
+```{r}
+fit_tcnaf_gamma <- glm(tempo_internacao_utiped ~ genero + idade_gestac_nasc + hospital,
+                        family = Gamma(link = "identity"),
+                        data = dados)
+tbl_tcnaf_gamma <- fit_tcnaf_gamma |>
+  tbl_regression(intercept = TRUE) |>
+  add_global_p()
+# tbl_tcnaf_gamma$table_body[1, "label"] <- "(Intercepto)"
+```
+
+A Tabela @tbl-regressoes-tempo mostra os resultados dos modelos lineares generalizados para as variáveis contínuas.[^2] Os coeficientes negativos indicam que, ao controlar os efeitos de gênero e do hospital, estima-se pelos modelos que os tempos de internação total, na UTIPed e de uso do CNAF diminuem com o número de semanas de gestação. Em relação aos hospitais, vemos que, quando consideramos gênero e idade gestacional, os modelos estimam que o tempo de internação total é maior para o Hospital A, enquanto que os tempo de internação na UTIPed e de uso do CNAF são menores. Contudo, a $\alpha = 5\%$ nenhuma dessas covariáveis foram significativas para alguma das variáveis de interesse.
+
+[^2]: A família utilizada nos modelos das três variáveis foi a Gama com função de ligação identidade (linear).
+
+```{r}
+#| label: tbl-regressoes-tempo
+#| tbl-cap: "Regression table for the gamma models for stay time variables."
+
+tbl_regressoes_tempo <-
+  tbl_merge(
+    tbls = list(tbl_ttotal_gamma, tbl_tutiped_gamma, tbl_tcnaf_gamma),
+    tab_spanner = c(
+      "**Total stay time**",
+      "**PICU stay time**",
+      "**Time using HFNC**"
+    )
+  ) |>
+  modify_footnote(
+    update = list(
+      starts_with("estimate_") ~ "Adjust coef."
+    )
+  ) |>
+  bold_labels() |>
+  italicize_labels()
+
+knitr::knit_print(adjust_table_to_format(tbl_regressoes_tempo))
+```

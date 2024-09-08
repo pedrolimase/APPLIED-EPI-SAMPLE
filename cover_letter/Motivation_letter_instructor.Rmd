@@ -1,0 +1,19 @@
+---
+title: "Cover Letter"
+output: 
+  bookdown::pdf_document2:
+    template: carta_template.tex
+---
+
+I am writing to express my interest in joining the R Instructor Roster at Applied Epi. While I have not yet had the opportunity to collaborate directly with your team, I have benefited immensely from The Epidemiologist R Handbook throughout my academic journey. The resources provided by Applied Epi's team of collaborators have significantly enhanced my ability to use R for statistical analysis in clinical research, and I deeply admire Applied Epi's principles and values and the impact you've had on epidemiology professionals and of several other disciplines, me included.
+
+My academic background is in Statistics and I've recently completed my bachelor's degree. Throughout my journey I participated in internships, a study group in causal inference, statistical consulting and teaching assistance. In my consulting role, I worked closely with clinical researchers and fellow students, providing reproducible statistical analyses using `R`'s rich ecosystem, while also communicating complex statistical information to non-technical audiences.
+
+I am confident that my strong foundation in Statistics, my communication skills and `R` experience position me well as a candidate for the Assistant Instructor role in introductory R courses. As I continue to grow, I look forward to the possibility of contributing to more advanced courses as well. I am particularly excited about the opportunity to give back to the R community, while also learning from and collaborating with Applied Epi's team of experts.
+
+I am a native Portuguese speaker fluent in English and I'm based in Brasília, DF, Brazil (UTC-3). My schedule is flexible schedule and I am open to start right away, both remote and in-person. Thank you for considering my application; I am eager for the opportunity of contributing to your mission.
+
+Sincerely,
+
+Pedro Henrique Lima de Menezes
+

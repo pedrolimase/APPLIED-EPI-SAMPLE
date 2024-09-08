@@ -1,0 +1,760 @@
+---
+title: "On the use of High-Flow Nasal Cannula in Intensive Care Units in two Hospitals in (Redacted)"
+author: "Pedro Menezes"
+date: "today"
+date-format: long
+execute:
+  echo: false
+  warning: false
+  error: false
+  message: false
+  cache: true
+format:
+  html:
+    toc: true
+    toc-location: "body"
+    toc-depth: 3
+    theme: cosmo
+    code-link: true
+    embed-resources: true
+  pdf:
+    documentclass: article
+    fontsize: 12pt
+    margin-left: 30mm
+    margin-top: 30mm
+    margin-right: 20mm
+    margin-bottom: 20mm
+    include-in-header:
+      - preamble.tex
+    toc: true
+    toc-depth: 3
+    fig-width: 7
+    fig-height: 4.33
+    fig-pos: "!hb"
+    # fig-pos: "!htb"
+knitr:
+  opts_chunk:
+    fig.path: "results/"
+lang: "en"
+crossref:
+  fig-prefix: ""
+  tbl-prefix: ""
+editor: visual
+fig-align: center
+number-sections: true
+number-depth: 3
+bibliography: grateful-refs.bib
+---
+
+```{r}
+#| label: package-loading
+
+library(readxl)
+library(magrittr)
+library(tibble)
+library(dplyr)
+library(tidyr)
+library(janitor)
+library(purrr)
+
+library(forcats)
+library(stringr)
+library(lubridate)
+library(hms)
+
+library(gtsummary)
+library(ggplot2)
+library(sjPlot)
+```
+
+```{r}
+#| label: function-definitions
+
+paste_date_time <- function(date, time, tz = "Etc/GMT-3", ...){
+  args <- list(...)
+  args[["tz"]] <- tz
+  
+  dtt <- paste(ymd(date), as_hms(time))
+  dtt <- ifelse(str_detect(dtt, "NA"), NA, dtt)
+  do.call("ymd_hms", c(list(dtt), args))
+}
+
+# Wilson proportion test (stats::prop.test)
+wilson_prop_test <- function(data, variable, by, conf.level, ...) {
+  .f <- reformulate(by, variable)
+  mosaic::prop.test(.f, data = data, conf.level = conf.level) |>
+    broom::tidy() |>
+    mutate(estimate = (estimate1 - estimate2),
+           .before = estimate1)
+}
+
+# Adjust print engine to document format
+adjust_table_to_format <- function(x) {
+  if(!knitr::is_html_output()) {
+    x <- as_flex_table(x) |>
+      flextable::set_table_properties(layout = "autofit")
+  }
+  x
+}
+```
+
+```{r}
+#| label: theme-setting
+
+theme_set(theme_bw(base_size = 11))
+theme_update(legend.position = "top")
+theme_gtsummary_compact()
+```
+
+```{r}
+#| label: data-cleaning
+
+dir_dados <- "data/hcnf_data_anonymized.xlsx"
+dados_a <- read_excel(dir_dados, sheet = "Hospital A")
+dados_b <- read_excel(dir_dados, sheet = "Hospital B")
+
+dados_raw <- list("B" = dados_b, "A" = dados_a) |>
+  bind_rows(.id = "hospital") |>
+  rename(
+    "id_paciente" = "Id do paciente",
+    "idade_gestac_nasc" = "Idade gestacional de nascimento",
+    "cardiopatia_cong" = "Cardiopatia congênita",
+    "tipo_cardiopatia_cong" = "Qual?",
+    "genero" = "Gênero",
+    "dt_admissao_hospit" = "Data da admissão hospitalar",
+    "h_admissao_hospit" = "Hora da admissão hospitalar",
+    "dt_admissao_utiped" = "Data da admissão na UTI",
+    "h_admissao_utiped" =  "Hora da admissão UTI",
+    "dt_inicio_uso_cnaf" = "Data de início do uso do CNAF",
+    "h_inicio_uso_cnaf" = "Hora da início do uso do CNAF",
+    "dt_retirada_cnaf" = "Data de RETIRADA do CNAF",
+    "h_retirada_cnaf" = "Hora de RETIRADA do CNAF",
+    "falha_desmame" = "Falha no desmame",
+    "num_falhas_desmame" = "Número de falhas de retirada do CNAF",
+    "vm" = "VM",
+    "vni" = "VNI",
+    "dt_alta_utiped" = "Data de ALTA da UTIPed",
+    "h_alta_utiped" = "Hora da ALTA da UTIPed",
+    "dt_alta_hospit" = "Data de ALTA hospitalar",
+    "h_alta_hospit" = "Hora da ALTA hospitalar",
+    "adesao_crit_alta_hospit" = "Adesão aos critérios de alta hospitalar?"
+  )
+dados <- dados_raw
+
+# Correction of inconsistent
+dados[dados$id_paciente == 4486322, ]$dt_alta_utiped <- as.Date("2024-02-28") # Before: 2023-02-28
+dados[dados$id_paciente == 4599433, ]$dt_admissao_utiped <- as.Date("2024-04-03") # Before: 2023-04-03
+dados[dados$id_paciente == 4579053, ]$dt_inicio_uso_cnaf <- as.Date("2024-03-24") # Before: 2054-03-24
+
+dados <- dados |>
+  mutate(hospital = as.factor(hospital),
+         cardiopatia_cong = fct_recode(cardiopatia_cong,
+                                       "Yes" = "1: Sim",
+                                       "No" = "2: Não"),
+         genero = fct_recode(genero,
+                             "Male" =  "1: masculino",
+                             "Female" = "2: feminino"),
+         falha_desmame = fct_recode(falha_desmame,
+                                    "Yes" =  "1: sim",
+                                    "No" = "2: não"),
+         vm = fct_recode(vm,
+                         "Yes" =  "1: sim",
+                         "No" = "2: não"),
+         vni = fct_recode(vni,
+                          "Yes" =  "(1: sim",
+                          "No" = "2: não"),
+         adesao_crit_alta_hospit = fct_recode(adesao_crit_alta_hospit,
+                                              "Yes" =  "1: sim",
+                                              #"Não" = "2: não"
+                                              ),
+         # Junção de datas e horas
+         dt_admissao_hospit = paste_date_time(dt_admissao_hospit, h_admissao_hospit),
+         dt_admissao_utiped = paste_date_time(dt_admissao_utiped, h_admissao_utiped),
+         dt_inicio_uso_cnaf = paste_date_time(dt_inicio_uso_cnaf, h_inicio_uso_cnaf),
+         dt_retirada_cnaf = paste_date_time(dt_retirada_cnaf, h_retirada_cnaf),
+         dt_alta_utiped = paste_date_time(dt_alta_utiped, h_alta_utiped),
+         dt_alta_hospit = paste_date_time(dt_alta_hospit, h_alta_hospit),
+         # Calculation of time intervals
+         tempo_internacao_hospit = interval(dt_admissao_hospit, dt_alta_hospit) / days(),
+         tempo_internacao_utiped = interval(dt_admissao_utiped, dt_alta_utiped) / days(),
+         tempo_uso_cnaf = interval(dt_inicio_uso_cnaf, dt_retirada_cnaf) / days()) |>
+  # Drop dates and times columns (except for birth date)
+  select(-starts_with(c("dt_", "h_"))) |>
+  # Inclusion criteria
+  filter(
+    # Did not use mechanical ventilation (VM or VNI)
+    vm == "No" & vni == "No",
+    # No congenital heart disease
+    cardiopatia_cong == "No",
+    # Not extreme premature
+    idade_gestac_nasc >= 29
+  ) |>
+  # Remove constant columns
+  janitor::remove_constant(na.rm = TRUE, quiet = FALSE)
+
+# Constant variables dropped from the dataset:
+# - cardiopatia_cong
+# - tipo_cardiopatia_cong
+# - vm
+# - vni
+# - adesao_crit_alta_hospit
+
+saveRDS(dados, "data/hfnc_data_cleaned.RDS")
+```
+
+```{r}
+#| label: data-importing
+var_labels <- list(
+  genero = "Sex",
+  idade_gestac_nasc = "Pregnancy weeks",
+  falha_desmame = "Weaning failure",
+  num_falhas_desmame = "Number of weaning failures",
+  tempo_internacao_hospit = "Days of hospitalization",
+  tempo_internacao_utiped = "Days in the PICU",
+  tempo_uso_cnaf = "Days using the HFNC",
+  hospital = "Hospital"
+)
+
+# Load data and set variable labels
+dados <- readRDS("data/hfnc_data_cleaned.RDS") |>
+  labelled::set_variable_labels(!!!var_labels)
+```
+
+## Introduction
+
+This report is the result of a statistical analysis project in which I analyzed the use of high-flow nasal cannula (HFNC) in pediatric intensive care units (PICU) in two hospitals (A and B). The main goal of the study was to determine whether the HFNC remotion protocol was associated to weaning failure, considering each hospital used a different protocol. There was also an interest in the hospital and PICU stay and HFNC usage times. Before anything, I explain some important concepts that the client may not be acquainted with. Then I start with reading, cleaning and transforming the data using various `tidyverse` packages and `janitor`. Using `gtsummary`, I proceeded with a descriptive analyis comparing each patient characteristic according to hospitals, in which I also include univariate tests of association. Finally, I used some multivariate generalized linear models (logistic and gamma regression) to estimate the effect of the protocol/hospital in some variables of interest adjusted for possible confounder variables (weeks of pregnancy and sex). Their assumptions were assessed using the `performance` package that is part of the `easystats` framework.
+
+## Concepts
+
+```{=html}
+<!--
+{{< include chapters/1_concepts.qmd >}}
+-->
+```
+### Odds
+
+Although in everyday language people use "odds" and "probability" interchangeably, these are predice terms with distinct meaning, altough they're closely related. **Odds** refers to the ratio between the probability of an event happening and the probability of it *not* happening --- that is, how much more likely it is to occur than not. More precisely, if $p \in [0, 1]$ represents the probability of an event, then $c = p / (1 - p)$ defines its odds. In turn, we can calculate the probability from the odds using the equation $p = c / (1 + c)$. For example, an event with a 50% probability would have odds of 1, while an event with a 75% probability would have odds of 1.5.
+
+### Quantiles
+
+**Quantiles** are cutoff points that divide a population or sample with respect to a numeric variable. For instance, if the 40th percentile (quantile) for hospital stay duration is 5.84 days, this means that approximately 40% of patients stay for up to 5.84 days, while 60% stay longer. A specific case of quantiles are **quartiles**, which divide data into four roughly equal groups using the 25th, 50th (median), and 75th percentiles. These quartiles are often referred to as Q1, Q2, and Q3, respectively.
+
+### Hypothesis Testing
+
+A significant part of clinical results analysis involves comparisons, often between treatments, procedures, or patient groups. The numerical value representing the comparison is commonly referred to as the **effect**. A **null hypothesis** ($H_0$) posits that the effect is zero --- for example, the mean duration of respiratory support in two hospitals is the same. The null hypothesis typically contradicts the research hypothesis. The **alternative hypothesis** ($H_a$) usually suggests that the effect is different from zero.
+
+Once the null hypothesis $H_0$ is defined, an appropriate **hypothesis test** assesses the probability of observing the collected data (or more extreme data) if $H_0$ were true. This probability is known as the **p-value**; the smaller the p-value, the less plausible $H_0$ becomes. The null hypothesis is rejected if the p-value is less than or equal to the **significance level** $\alpha \in [0, 1]$, indicating the effect is **statistically significant**.
+
+Key points regarding hypothesis testing:
+
+i)  Rejecting the null hypothesis does not guarantee the effect is truly different from zero. Given the randomness of data, coincidences by random chance may still occur. Rejecting $H_0$ means it would be unlikely (but not impossible) to observe the same data if $H_0$ were true. Rejecting $H_0$ when it is actually true is known as a **Type I error**, which happens with probability $\alpha$.
+
+ii) Failing to reject the null hypothesis is not the same as accepting it. It is entirely possible to fail to detect an actual effect (**Type II error**), especially when the sample size is small relative to the effect size. The smaller the effect, the larger the sample size needed to detect it. The probability of this error varies depending on the effect size.
+
+iii) Statistical significance does not imply practical significance. Statistically significant differences may not be large or meaningful; they are simply detectable.
+
+iv) While choosing an appropriate significance level $\alpha$ is subjective and depends on the researcher’s judgment, $\alpha = 5\%$ (1 in 19 odds) is a common choice.
+
+v)  The p-value should **not** be interpreted as the probability that the null hypothesis is true.
+
+One issue with hypothesis tests is that they do not provide information about the **magnitude** of the effect, which makes confidence intervals a much more informative tool.
+
+### Confidence Interval
+
+Suppose we estimate a parameter of interest using a sample, such as the average gestational age at birth in a given hospital. The sample mean is the best estimate or "guess" of the true value of this parameter. However, we don't know with certainty how close or far this guess is from the real value. To quantify the uncertainty in this estimate, we construct a **confidence interval** (CI) --- a range of values around the sample estimate within which we can be *confident* (but not certain) that the true parameter lies.
+
+The desired confidence level is governed by the **confidence level** $\gamma \in [0, 1]$. We expect that the confidence interval will contain the true parameter value in $\gamma \times 100\%$ of samples of fixed size. Increasing the confidence level improves coverage but also leads to wider intervals and thus greater uncertainty. There is, therefore, a trade-off between confidence and precision.
+
+**Connection between Confidence Intervals and Hypothesis Testing:** A confidence interval can serve as a hypothesis test by rejecting the null hypothesis if zero is not within the interval. In this case, the significance level of the test is $\alpha = 1 - \gamma$. Similarly, a hypothesis test can be reversed to generate a confidence interval.
+
+## Methods
+
+```{=html}
+<!--
+{{< include chapters/2_methods.qmd >}}
+-->
+```
+### Welch's t-test
+
+The Welch's t-test is a location test for two samples, used to test the null hypothesis that two independent groups have equal means with respect to a variable of interest. It is a more robust version of the classic Student's t-test, accommodating differences in variability and/or sample size between groups.
+
+### Wilson's test for proportions
+
+The Wilson test is used to evaluate the hypothesis that the proportions in two independent groups are the same. For example, in a sample of study patients, 58% of those admitted to Hospital B were male, while this percentage was lower at Hospital A, at 54%. Wilson's test can be applied to assess whether these differences are statistically significant.
+
+### Regression
+
+Regression refers to a set of statistical processes aimed at studying the relationship between a **response variable** and a set of **covariates**, both in predictive and inferential contexts. Among regression techniques are logistic regression and gamma regression, both special cases of the **generalized linear model** (GLM), which will be used in this analysis.
+
+#### Logistic regression
+
+Logistic regression is a statistical modeling technique for binary response variables. It is used to estimate the likelihood of an individual with certain characteristics (covariates) exhibiting, for example, failure in HFNC weaning. It can also be used to compare groups with different characteristics. If the logistic link function is applied (as in this case), the model's coefficients (exponentiated) can be interpreted as follows:
+
+-   For a numerical covariate, the corresponding coefficient estimates the **odds ratio (OR)** of weaning failure between groups differing by one unit in that covariate, with other covariates held constant. For example, if the covariate is gestational age at birth with an OR coefficient of 0.95, this means that each additional week of gestation reduces the likelihood of weaning failure by 5%.
+
+-   For a categorical covariate, there will be one coefficient for each level of the covariate, except for the **reference level**. The coefficient estimates the odds ratio of weaning failure between the group of the respective level and the group in the reference level, again, holding other covariates constant.
+
+#### Gamma regression
+
+Gamma regression is used to model continuous response variables, specifically those that are strictly positive, such as the duration of HFNC use. If the identity (linear) link function is applied, the coefficients can be interpreted as:
+
+-   For a numerical covariate: the coefficient is interpreted as the increase in the response variable's mean for each additional unit of the covariate, with other covariates held constant.
+
+-   For a categorical covariate: the coefficient for each level is interpreted as the increase in the response variable's mean for individuals at that level compared to those at the reference level, again holding other covariates constant.
+
+### Data cleaning
+
+Before the of beginning analysis, the dataset was cleaned. Based on exclusion criteria, the following patients were removed from the sample:
+
+-   Those subjected to Mechanical Ventilation (MV) or Non-Invasive Ventilation (NIV);
+-   Those born with congenital heart disease (cardiopaths);
+-   Extremely premature infants (gestation below 29 weeks).
+
+Additionally, some inconsistent records were corrected, as follows:
+
+-   Patient `4486322` had `PICU discharge date` in 2023-02-28, inconsistent with `Hospital Admission Date` in 2024-02-25. This was corrected to 2024-02-28.
+-   Patient `4599433` had `PICU admission date` in 2023-04-03, inconsistent with `Hospital Admission Date` of 2024-03-31. This was corrected to 2024-04-03.
+-   Patient `4579053` had `HFNC start date` in 2054-03-24. This was corrected to 2024-03-24.
+
+For univariate analyses between hospitals, Welch's t-test and Wilson's test were used to assess differences in means and proportions, respectively. Welch’s t-test was chosen after visually assessing the normality of bootstrapped mean differences through Q-Q plots. The selection of Wilson’s test was justified by its adherence to nominal significance levels and robusteness to assymetry.
+
+Multivariate analyses were performed using generalized linear models (GLMs), specifically employing the binomial family (logistic regression) for binary variables and the gamma family for time-related numeric variables. The gamma family was initially chosen for its positivity and similarity in shape to the time distributions in the data. I used a identity link function in latter cases to keep things simple. After estimation, the models were evaluated using residual analysis and no significant deviations from assumptions were found.
+
+### Software
+
+```{r}
+# report::cite_packages()
+grateful::cite_packages(output = "paragraph", out.dir = ".", passive.voice = TRUE)
+```
+
+## Results
+
+Table @tbl-estatisticas presents some summary statistics of patients variables of interest, both in general and segmented by hospital. For categorical variables, namely `sex` and `HFNC weaning failure`, I provide the number and percentage of occurrences for each category. For numerical variables (all the remaining), the mean and standard deviation, the median and the 25th and 75th percentiles, as well as the minimum and maximum values, are calculated. Differences in means or proportions between Hospital A and Hospital B are also presented, along with the $\gamma = 95\%$ confidence interval for these differences, and the p-value of the two-tailed test for no difference.[^1] According to the univariate tests, at a $\alpha = 5\%$ significance level, it was found no evidence that the hospital or HFNC weaning protocol is a factor that explains the differences in total length of stay, length of stay in the Pediatric ICU (PICU), HFNC usage time, or the occurrence or number of HFNC weaning failures.
+
+[^1]: Holspitals were compared using Welch's t-test for numerical variables and Wilson's test for binary variables.
+
+```{r}
+#| label: tbl-estatisticas
+#| tbl-cap: "Descriptive summary statistics and association tests with hospital for variables of interest."
+
+# portuguese format
+# theme_gtsummary_language(
+#   language = "pt",
+#   decimal.mark = ",",
+#   big.mark = ".",
+#   iqr.sep = "; ",
+#   ci.sep = "; ",
+#   set_theme = TRUE
+# )
+
+# english format
+theme_gtsummary_language(
+  language = "en",
+  decimal.mark = ".",
+  big.mark = ",",
+  iqr.sep = ", ",
+  ci.sep = ", ",
+  set_theme = TRUE
+)
+
+tbl_estatisticas <-
+  dados |>
+  select(hospital, genero, idade_gestac_nasc, falha_desmame, num_falhas_desmame,
+         tempo_internacao_hospit, tempo_internacao_utiped, tempo_uso_cnaf) |>
+  tbl_summary(
+    by = hospital,
+    statistic = list(
+      all_continuous2() ~ c("{mean} ({sd})",
+                            "{median} ({p25}; {p75})",
+                            "{min}; {max}")
+    ),
+    type = list(everything() ~ "continuous2",
+                where(is.factor) ~ "categorical"),
+  ) |>
+  add_overall() |>
+  add_difference(
+    conf.level = 0.95,
+    test = list(all_continuous2() ~ "t.test",
+                all_categorical() ~ "wilson_prop_test"),
+    include = everything()
+  ) |>
+  modify_footnote(
+    update = list(
+      estimate ~ "Mean difference; Difference in proportions",
+      c(p.value, conf.low) ~ "Welch's t-test; Wilson's test"
+    )
+  ) |>
+  # modify_header(label = "**Variável**",
+  #               stat_0 = "**Geral**",
+  #               estimate = "**Diferença**",
+  #               conf.low = "**IC 95%**") |>
+  modify_spanning_header(stat_1:stat_2 ~ "**Hospital**") |>
+  bold_labels() |>
+  italicize_labels()
+
+knitr::knit_print(adjust_table_to_format(tbl_estatisticas))
+```
+
+Figure @fig-genero shows the sex proportions of patients in the hospitals. We observe that the proportion of male patients at Hospital B was a little bit higher than at Hospital A, 58% versus 54%. According to Table @tbl-estatisticas, the overall proportions were 55% male patients versus 45% female patients.
+
+```{r}
+#| label: fig-genero
+#| fig-cap: "Sex proportions of patients according to hospital."
+
+plot_xtab(dados$hospital, dados$genero,
+          bar.pos = "stack", margin = "row")
+```
+
+Figure @fig-falha shows the occurrence of HFNC weaning failure across hospitals. It is observed that both hospitals had 6 patients who experienced failure; however, proportionally, there were more failures at Hospital Brasília than at Hospital Águas Claras, 19% versus 11%, a difference of 8%. As shown in Table @tbl-estatisticas, 14% of the patients overall experienced failure.
+
+```{r}
+#| label: fig-falha
+#| fig-cap: "Ocurrence of failures in HFNC weaning by hospital."
+
+plot_xtab(dados$hospital, dados$falha_desmame,
+          bar.pos = "stack", margin = "row")
+```
+
+Figures @fig-continuas-histograma to @fig-continuas-boxplot show the distribution of gestational age at birth and the total length of stay, length of stay in the PICU, and length of HFNC usage. The first, Figure @fig-continuas-histograma, displays the histogram of these variables, representing the density of values in each range determined by the bars. The second, Figure @fig-continuas-densidade, shows density plots, a smoothed or continuous version of the histogram, which facilitates comparisons. Finally, the third, Figure @fig-continuas-boxplot, highlights the quartiles — particularly the median shown in Table @tbl-estatisticas — which aids in identifying differences in medians or means. However, none of these graphs show a significant deviation between hospitals for any variable; the results appear quite similar.
+
+```{r}
+#| label: fig-continuas-histograma
+#| fig-cap: "Histogram for the distribution of continuous variables by hospital."
+
+dados2 <- dados |>
+  select(hospital, idade_gestac_nasc, starts_with("tempo_")) |>
+  pivot_longer(-hospital, names_to = "variavel", values_to = "valor") |>
+  mutate(variavel = fct_recode(variavel,
+                               "Gestational age at birth (weeks)" = "idade_gestac_nasc",
+                               "Total time of stay (days)" = "tempo_internacao_hospit",
+                               "Time of stay in the PICU (days)" = "tempo_internacao_utiped",
+                               "HFNC usage time (days)" = "tempo_uso_cnaf"))
+
+filter(dados2, !str_detect(variavel, "^Number")) |>
+  ggplot() +
+  aes(x = valor, y = after_stat(density), fill = hospital)+
+  geom_histogram(color = "black", alpha = 0.5)+
+  facet_wrap(~ variavel, scales = "free")+
+  labs(x = "", y = "Density", fill = "Hospital")
+```
+
+```{r}
+#| label: fig-continuas-densidade
+#| fig-cap: "Density distribution of continuous variables by hospital."
+
+filter(dados2, !str_detect(variavel, "^Number")) |>
+  ggplot() +
+  aes(x = valor, fill = hospital) +
+  geom_density(color = "black", alpha = 0.5) +
+  facet_wrap( ~ variavel, scales = "free") +
+  labs(x = "", y = "Density", fill = "Hospital")
+```
+
+```{r}
+#| label: fig-continuas-boxplot
+#| fig-cap: "Boxplot diagram with the distribution of continuous variables by hospital."
+
+ggplot(dados2) +
+  aes(x = valor, fill = hospital)+
+  geom_boxplot(alpha = 0.5)+
+  facet_wrap(~ variavel, scales = "free")+
+  scale_y_continuous(breaks = NULL)+
+  labs(x = "", y = "", fill = "Hospital")
+```
+
+Figure @fig-num-falhas shows the distribution of the number of HFNC weaning failures per hospital. As mentioned, there were only 12 cases of patients who experienced failures in the dataset. Specifically, for each hospital, 1 patient had 2 failures, and 5 patients had 1 failure; the others did not experience failures.
+
+```{r}
+#| label: fig-num-falhas
+#| fig-cap: "Distribution of the number of HFNC weaning failures in hospitals."
+
+mutate(dados, hospital = str_c("Hospital ", hospital)) |>
+ggplot()+
+  aes(x = num_falhas_desmame, y = hospital, color = hospital) +
+  geom_jitter(height = 0.15, width = 0.05, alpha = 0.5) +
+  scale_x_continuous(breaks = c(0, 1, 2)) +
+  labs(x = "Weaning failures", y = "", color = "") +
+  theme(legend.position = "no")
+```
+
+The final graph in the Figure @fig-idade-gestac shows the total length of stay, length of stay in the PICU, and length using HFNC by gestational age at birth. The lines represent the average values of these variables for patients of each gestational age. It can be seen that the average total length of stay is always greater than the average length of stay in the PICU, which in turn is greater than the average HFNC usage time. However, although these times tend to decrease with gestational age, the differences seem to be small.
+
+```{r}
+#| label: fig-idade-gestac
+#| fig-cap: "Total time of stay, PICU stay time and time using HFNC according to gestational age at birth."
+
+pivotear_dados <- . %>%
+  pivot_longer(c(tempo_internacao_hospit,
+                 tempo_internacao_utiped,
+                 tempo_uso_cnaf), names_to = "variavel", values_to = "tempo") %>%
+  mutate(variavel = fct_recode(variavel,
+                               "Total time of stay" = "tempo_internacao_hospit",
+                               "PICU stay time" = "tempo_internacao_utiped",
+                               "HFNC use time" = "tempo_uso_cnaf"))
+
+media_idade_gestac_nasc <- dados |>
+  select(idade_gestac_nasc, tempo_internacao_hospit, tempo_internacao_utiped, tempo_uso_cnaf) |>
+  group_by(idade_gestac_nasc) |>
+  summarise(across(everything(), mean, na.rm = TRUE)) |>
+  pivotear_dados()
+
+dados |>
+  select(idade_gestac_nasc, tempo_internacao_hospit, tempo_internacao_utiped, tempo_uso_cnaf) |>
+  pivotear_dados() |>
+ggplot(aes(x = idade_gestac_nasc, y = tempo, color = variavel))+
+  geom_jitter(width = 0.1, alpha = 0.6)+
+  geom_line(data = media_idade_gestac_nasc)+
+  # geom_smooth(se = FALSE)+
+  labs(x = "Gestational age at birth (weeks)", y = "Time (days)", color = "")
+```
+
+```{r}
+dados <- dados |>
+  mutate(falha_desmame = relevel(falha_desmame, ref = "No"))
+  
+fit_falha_lr <- glm(falha_desmame ~ genero + idade_gestac_nasc + hospital,
+                    family = "binomial", data = dados)
+  
+tbl_falha_lr <- fit_falha_lr |>
+  tbl_regression(exponentiate = TRUE,
+                 intercept = TRUE) |>
+  add_global_p(
+    # keep = TRUE
+  ) |>
+  # add_glance_table() |>
+  bold_labels() |>
+  italicize_labels()
+# tbl_falha_lr$table_body[1, "label"] <- "(Intercepto)"
+```
+
+```{r}
+#| label: efeitos-falha-lr
+
+falha_lr_genero <-
+  inline_text(tbl_falha_lr,
+              variable = "genero",
+              level = "Female",
+              pattern = "{estimate} (IC {conf.level*100}%: {conf.low}, {conf.high})")
+
+falha_lr_idade_nasc <-
+  inline_text(tbl_falha_lr,
+              variable = "idade_gestac_nasc",
+              pattern = "{estimate} (IC {conf.level*100}%: {conf.low}, {conf.high})")
+
+falha_lr_hospital <-
+  inline_text(tbl_falha_lr,
+              variable = "hospital",
+              level = "B",
+              pattern = "{estimate} (IC {conf.level*100}%: {conf.low}, {conf.high})")
+```
+
+The Table @tbl-falha-lr presents the results of the logistic regression model for the occurrence of HFNC weaning failure. The estimated odds ratio for hospital adjusted to sex and gestational age was `r falha_lr_hospital`, indicates a 81% chance of weaning failure at Hospital B. However, none of these variables were statistically significant at the $\alpha = 5\%$ level. Additionally, as shown by the confidence interval, the estimates are highly uncertain, especially the intercept, so it may prudent to avoid interpreting them. We also see that on average gestational age odds ratio is `r falha_lr_idade_nasc` for each extra week of pregnancy.
+
+```{r}
+#| label: tbl-falha-lr
+#| tbl-cap: "Logistic regression table for the occurrence of HFNC weaning failure."
+
+knitr::knit_print(adjust_table_to_format(tbl_falha_lr))
+```
+
+```{r}
+fit_ttotal_gamma <- glm(tempo_internacao_hospit ~ genero + idade_gestac_nasc + hospital,
+                        family = Gamma(link = "identity"),
+                        data = dados)
+
+tbl_ttotal_gamma <- fit_ttotal_gamma |>
+  tbl_regression(intercept = TRUE) |>
+  add_global_p()
+# tbl_ttotal_gamma$table_body[1, "label"] <- "(Intercepto)"
+```
+
+```{r}
+fit_tutiped_gamma <- glm(tempo_internacao_utiped ~ genero + idade_gestac_nasc + hospital,
+                        family = Gamma(link = "identity"),
+                        data = dados)
+
+tbl_tutiped_gamma <- fit_tutiped_gamma |>
+  tbl_regression(intercept = TRUE) |>
+  add_global_p()
+```
+
+```{r}
+fit_tcnaf_gamma <- glm(tempo_uso_cnaf ~ genero + idade_gestac_nasc + hospital,
+                        family = Gamma(link = "identity"),
+                        data = dados)
+
+tbl_tcnaf_gamma <- fit_tcnaf_gamma |>
+  tbl_regression(intercept = TRUE) |>
+  add_global_p()
+```
+
+The Table @tbl-regressoes-tempo shows the regression results for the gamma models for the continuous variables. Negative coefficients indicate that, after controlling for the effects of sex and hospital, the models estimate that the total length of stay, length of stay in the PICU, and duration of HFNC use decrease with gestational weeks. Regarding hospitals, we observe that, when considering sex and gestational age, the models estimate that the total length of stay is longer for Hospital A, while the length of stay in the PICU and time using HFNC are shorter. However, at a significance level of $\alpha = 5%$, none of these covariates were statistically significant for any of the variables of interest.
+
+```{r}
+#| label: tbl-regressoes-tempo
+#| tbl-cap: "Regression table for the gamma models for stay time variables."
+
+tbl_regressoes_tempo <-
+  tbl_merge(
+    tbls = list(tbl_ttotal_gamma, tbl_tutiped_gamma, tbl_tcnaf_gamma),
+    tab_spanner = c(
+      "**Total stay time**",
+      "**PICU stay time**",
+      "**Time using HFNC**"
+    )
+  ) |>
+  modify_footnote(
+    update = list(
+      starts_with("estimate_") ~ "Adjusted coefficient"
+    )
+  ) |>
+  bold_labels() |>
+  italicize_labels()
+
+knitr::knit_print(adjust_table_to_format(tbl_regressoes_tempo))
+```
+
+\clearpage
+
+### Supplementary results
+
+#### Appropriateness of Welch's t-test
+
+In this section, I assess the normality of the differences in means (or proportions), which is a key assumption for the validity of Welch's test. The plots in Figure @fig-boot-diffs illustrate the differences in hospital means, computed from 1000 bootstrapped resamples. Despite Shapiro-Wilk tests indicating non-normality at the 5% significance level for total hospital stay and PICU stay durations, the theoretical (normal) and sample quantiles align well across most of the distribution. For PICU stay durations, the non-normality seems driven by a single outlier in the left tail. Furthermore, the p-values and confidence intervals remain consistent, with no changes in conclusions. This suggests that the Welch test is robust and appropriate in this context.
+
+```{r}
+#| label: fig-boot-diffs
+#| fig-cap: "Bootstrapped mean (proportion) hospital differences."
+#| fig-height: 8
+
+# Q-Q plot of bootstraped mean/proportion differences
+qqplot_boot_diff <- function(data, y, x, title = y, B = 1000, na.rm = TRUE){
+  .f <- reformulate(x, y)
+  
+  diffmeans_boot <- mosaic::do(B) * 
+    mosaic::diffmean(.f, data = mosaic::resample(data, replace = TRUE), na.rm = na.rm)
+  
+  diffmeans_boot$diffmean <- (-1) * diffmeans_boot$diffmean
+  dm <- diffmeans_boot$diffmean
+  
+  p_value_norm <- diffmeans_boot |>
+    with(shapiro.test(diffmean)$p.value) |>
+    scales::pvalue()
+  
+  ci_boot <- stats::quantile(dm, probs = c(0.025, 0.975)) |>
+    scales::number(accuracy = 0.01) |>
+    str_flatten(collapse = ", ")
+  
+  p_value_boot <- 2 * min(mean(dm > 0, na.rm = na.rm),
+                      mean(dm <= 0, na.rm = na.rm))
+  p_value_boot <- scales::pvalue(p_value_boot)
+  
+  welch_test <- mosaic::t.test(.f, data = data)
+  p_value_welch <- welch_test$p.value
+  p_value_welch <- scales::pvalue(p_value_welch)
+  
+  ci_welch <- welch_test$conf.int |>
+    scales::number(accuracy = 0.01) |>
+    str_flatten(collapse = ", ")
+  
+  g_qq <- ggplot(diffmeans_boot, aes(sample = diffmean)) +
+    geom_qq() +
+    geom_qq_line() +
+    annotate(geom = "text", label = str_glue("Shapiro-Wilk test p: {p_value_norm}\n
+                                              95% CI (p-values):
+                                              boot: [{ci_boot}] ({p_value_boot})
+                                              welch: [{ci_welch}] ({p_value_welch})"),
+             x = -Inf, y = Inf, hjust = 0, vjust = 1,
+             color = "navyblue") +
+    labs(title = title, x = "Theoretical", y = "Sample")
+  
+  g_qq
+}
+
+vars_boot <- c("idade_gestac_nasc", "num_falhas_desmame", "tempo_internacao_hospit",
+               "tempo_internacao_utiped", "tempo_uso_cnaf")
+
+set.seed(42)
+p_qq <- map2(vars_boot, var_labels[vars_boot],
+              ~ qqplot_boot_diff(dados, .x, x = "hospital", title = .y))
+
+library(patchwork)
+(p_qq[[1]] + p_qq[[2]]) / (p_qq[[3]] + p_qq[[4]]) / p_qq[[5]]
+```
+
+\clearpage
+
+#### Checking model assumptions
+
+This section addresses some of assumptions that the logistic and gamma regression models depend on. Figures @fig-check-falhas-model - @fig-check-tcnaf-model display three plots each: (i) a posterior predictive check that compares the each patient's estimated density of the response variable against the actual estimated overall density of all patients (as shown in Figure @fig-continuas-densidade), (ii) standadized residuals vs leverage for detecting influential and/or outlier observations, (iii) variance inflation factors (VIF) for assessing multicollinearity between the explanatory variables. The PP-Checks indicates that all four model's predicted values are reasonably within the observed values, especially the PICU stay and HFNC use times. In none of the cases there were particularly significant outliers, but observation 26 (patient 4730347) was high leverage in the four models. Finally, the VIF point estimates did not evidence highly inflated standard errors due to muticollineratiy between covariates.
+
+```{r}
+#| label: fig-check-falhas-model
+#| fig-cap: "Checks of the logistic regression model assumptions for HFNC weaning failure."
+
+model_checks <- c("outliers", "vif", "pp_check", "uniformity")
+performance::check_model(fit_falha_lr, check = model_checks)
+```
+
+```{r}
+#| label: fig-check-ttotal-model
+#| fig-cap: "Checks of the gamma regression model assumptions for total stay time in the hospital "
+
+model_checks <- c("outliers", "vif", "pp_check", "uniformity")
+performance::check_model(fit_ttotal_gamma, check = model_checks)
+```
+
+```{r}
+#| label: fig-check-tutiped-model
+#| fig-cap: "Checks of the gamma regression model assumptions for total hospital stay time."
+
+performance::check_model(fit_tutiped_gamma, check = model_checks)
+```
+
+```{r}
+#| label: fig-check-tcnaf-model
+#| fig-cap: "Checks of the gamma regression model assumptions for time using the HFNC"
+
+performance::check_model(fit_tcnaf_gamma, check = model_checks)
+```
+
+```{r}
+#| eval: false
+#| label: export-tables
+
+tables_names <- ls(pattern = "tbl_")
+tables_objs <- purrr::map(tables_names, get)
+
+purrr::walk2(tables_names, tables_objs, ~ {
+  .tbl <- as_flex_table(.y)
+  flextable::save_as_image(.tbl, path = str_glue("../results/{.x}.png"))
+  flextable::save_as_docx(.tbl, path = str_glue("../results/{.x}.docx"))
+})
+
+# gt::gtsave(as_gt(tbl_estatisticas), filename = "results/tbl-estatisticas.docx")
+# ggplot2::ggsave(plot = p_plot, filename = "results/figN-figura.png")
+```
+
+\clearpage
+
+## Comments
+
+```{=html}
+<!--
+{{< include chapters/4_comments.qmd >}}
+-->
+```
+As observed visually in the descriptive table and graph visualizations, there is little variability among patients subjected to different HFNC weaning protocols in terms of hospitalization time, duration of HFNC use, or the occurrence of weaning failures. Along with the fact that there were few recorded events of interest in the sample, with only six cases of weaning failure per hospital, it becomes difficult for statistical methods to detect any potentially small differences.
+
+Indeed, as shown in Table @tbl-estatisticas, according to the univariate tests, at a significance level of $\alpha = 5%$, no evidence was found that either the hospital or the HFNC weaning protocol is a factor explaining differences in total hospitalization time, pediatric ICU stay duration, HFNC usage time, or the occurrence or number of weaning failures.
+
+To refine the results, I also considered modeling the effect of hospital/protocol adjusted to sex and gestational age at birth, all measured prior to the procedure. However, in none of the cases were significant covariates found.
+
+Given these considerations, it may be worth considering an analysis with a larger sample size, so that more events of interest are available for comparison, in order to detect possible differences between hospitals and weaning procedures.
+
+\clearpage
+
+### References
+
+::: {#refs}
+:::

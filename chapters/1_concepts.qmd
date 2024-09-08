@@ -1,0 +1,35 @@
+### Odds
+
+Although in everyday language people use "odds" and "probability" interchangeably, these are predice terms with distinct meaning, altough they're closely related. **Odds** refers to the ratio between the probability of an event happening and the probability of it *not* happening --- that is, how much more likely it is to occur than not. More precisely, if $p \in [0, 1]$ represents the probability of an event, then $c = p / (1 - p)$ defines its odds. In turn, we can calculate the probability from the odds using the equation $p = c / (1 + c)$. For example, an event with a 50% probability would have odds of 1, while an event with a 75% probability would have odds of 1.5.
+
+### Quantiles
+
+**Quantiles** are cutoff points that divide a population or sample with respect to a numeric variable. For instance, if the 40th percentile (quantile) for hospital stay duration is 5.84 days, this means that approximately 40% of patients stay for up to 5.84 days, while 60% stay longer. A specific case of quantiles are **quartiles**, which divide data into four roughly equal groups using the 25th, 50th (median), and 75th percentiles. These quartiles are often referred to as Q1, Q2, and Q3, respectively.
+
+### Hypothesis Testing
+
+A significant part of clinical results analysis involves comparisons, often between treatments, procedures, or patient groups. The numerical value representing the comparison is commonly referred to as the **effect**. A **null hypothesis** ($H_0$) posits that the effect is zero --- for example, the mean duration of respiratory support in two hospitals is the same. The null hypothesis typically contradicts the research hypothesis. The **alternative hypothesis** ($H_a$) usually suggests that the effect is different from zero.
+
+Once the null hypothesis $H_0$ is defined, an appropriate **hypothesis test** assesses the probability of observing the collected data (or more extreme data) if $H_0$ were true. This probability is known as the **p-value**; the smaller the p-value, the less plausible $H_0$ becomes. The null hypothesis is rejected if the p-value is less than or equal to the **significance level** $\alpha \in [0, 1]$, indicating the effect is **statistically significant**.
+
+Key points regarding hypothesis testing:
+
+i) Rejecting the null hypothesis does not guarantee the effect is truly different from zero. Given the randomness of data, coincidences by random chance may still occur. Rejecting $H_0$ means it would be unlikely (but not impossible) to observe the same data if $H_0$ were true. Rejecting $H_0$ when it is actually true is known as a **Type I error**, which happens with probability $\alpha$.
+
+ii) Failing to reject the null hypothesis is not the same as accepting it. It is entirely possible to fail to detect an actual effect (**Type II error**), especially when the sample size is small relative to the effect size. The smaller the effect, the larger the sample size needed to detect it. The probability of this error varies depending on the effect size.
+
+iii) Statistical significance does not imply practical significance. Statistically significant differences may not be large or meaningful; they are simply detectable.
+
+iv) While choosing an appropriate significance level $\alpha$ is subjective and depends on the researcher’s judgment, $\alpha = 5\%$ (1 in 19 odds) is a common choice.
+
+v) The p-value should **not** be interpreted as the probability that the null hypothesis is true.
+
+One issue with hypothesis tests is that they do not provide information about the **magnitude** of the effect, which makes confidence intervals a much more informative tool.
+
+### Confidence Interval
+
+Suppose we estimate a parameter of interest using a sample, such as the average gestational age at birth in a given hospital. The sample mean is the best estimate or "guess" of the true value of this parameter. However, we don't know with certainty how close or far this guess is from the real value. To quantify the uncertainty in this estimate, we construct a **confidence interval** (CI) --- a range of values around the sample estimate within which we can be *confident* (but not certain) that the true parameter lies.
+
+The desired confidence level is governed by the **confidence level** $\gamma \in [0, 1]$. We expect that the confidence interval will contain the true parameter value in $\gamma \times 100\%$ of samples of fixed size. Increasing the confidence level improves coverage but also leads to wider intervals and thus greater uncertainty. There is, therefore, a trade-off between confidence and precision.
+
+**Connection between Confidence Intervals and Hypothesis Testing:** A confidence interval can serve as a hypothesis test by rejecting the null hypothesis if zero is not within the interval. In this case, the significance level of the test is $\alpha = 1 - \gamma$. Similarly, a hypothesis test can be reversed to generate a confidence interval.

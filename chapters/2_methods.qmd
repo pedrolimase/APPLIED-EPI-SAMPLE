@@ -1,0 +1,50 @@
+### Welch's t-test
+
+The Welch's t-test is a location test for two samples, used to test the null hypothesis that two independent groups have equal means with respect to a variable of interest. It is a more robust version of the classic Student's t-test, accommodating differences in variability and/or sample size between groups.
+
+### Wilson's test for proportions
+
+The Wilson test is used to evaluate the hypothesis that the proportions in two independent groups are the same. For example, in a sample of study patients, 58% of those admitted to Hospital B were male, while this percentage was lower at Hospital A, at 54%. Wilson's test can be applied to assess whether these differences are statistically significant.
+
+### Regression
+
+Regression refers to a set of statistical processes aimed at studying the relationship between a **response variable** and a set of **covariates**, both in predictive and inferential contexts. Among regression techniques are logistic regression and gamma regression, both special cases of the **generalized linear model** (GLM), which will be used in this analysis.
+
+#### Logistic regression
+
+Logistic regression is a statistical modeling technique for binary response variables. It is used to estimate the likelihood of an individual with certain characteristics (covariates) exhibiting, for example, failure in HFNC weaning. It can also be used to compare groups with different characteristics. If the logistic link function is applied (as in this case), the model's coefficients (exponentiated) can be interpreted as follows:
+
+- For a numerical covariate, the corresponding coefficient estimates the **odds ratio (OR)** of weaning failure between groups differing by one unit in that covariate, with other covariates held constant. For example, if the covariate is gestational age at birth with an OR coefficient of 0.95, this means that each additional week of gestation reduces the likelihood of weaning failure by 5%.
+
+- For a categorical covariate, there will be one coefficient for each level of the covariate, except for the **reference level**. The coefficient estimates the odds ratio of weaning failure between the group of the respective level and the group in the reference level, again, holding other covariates constant.
+
+#### Gamma regression
+
+Gamma regression is used to model continuous response variables, specifically those that are strictly positive, such as the duration of CNAF use. If the identity (linear) link function is applied, the coefficients can be interpreted as:
+
+- For a numerical covariate: the coefficient is interpreted as the increase in the response variable's mean for each additional unit of the covariate, with other covariates held constant.
+
+- For a categorical covariate: the coefficient for each level is interpreted as the increase in the response variable's mean for individuals at that level compared to those at the reference level, again holding other covariates constant.
+
+### Data cleaning
+
+Before the of beginning analysis, the dataset was cleaned. Based on exclusion criteria, the following patients were removed from the sample:
+
+- Those subjected to Mechanical Ventilation (MV) or Non-Invasive Mechanical Ventilation (NIV);
+- Those born with congenital heart disease (cardiopaths);
+- Extremely premature infants (gestation below 29 weeks).
+
+Additionally, some inconsistent records were corrected, as follows:
+
+- Patient `4486322` had `PICU discharge date` in 2023-02-28, inconsistent with `Hospital Admission Date` in 2024-02-25. This was corrected to 2024-02-28.
+- Patient `4599433` had `PICU admission date` in 2023-04-03, inconsistent with `Hospital Admission Date` of 2024-03-31. This was corrected to 2024-04-03.
+- Patient `4579053` had `HFNC start date` in 2054-03-24. This was corrected to 2024-03-24.
+
+For univariate analyses between hospitals, Welch's t-test and Wilson's test were used to assess differences in means and proportions, respectively. Welch’s t-test was chosen after visually assessing the normality of bootstrapped mean differences through Q-Q plots. The selection of Wilson’s test was justified by its adherence to nominal significance levels and robusteness to assymetry.
+
+Multivariate analyses were performed using generalized linear models (GLMs), specifically employing the binomial family (logistic regression) for binary variables and the gamma family for time-related numeric variables. The gamma family was initially chosen for its positivity and similarity in shape to the time distributions in the data. I used the identity link function in the gamma models to keep things simple, and the usual logit link for the logistic regression. After estimation, the models were evaluated using residual analysis and no significant deviations from the assumptions were found.
+
+### Software
+
+The analyses in this report were conducted using R software version 4.3.2, particularly the `tidyverse` library from @wickham2019welcome for data reading, processing, and visualization; the `gtsummary` package from @sjoberg2021reproducible for descriptive tables and model results; and the `sjPlot` package from @ludecke2023sjplot for bar charts, all in their most updated versions.
+
